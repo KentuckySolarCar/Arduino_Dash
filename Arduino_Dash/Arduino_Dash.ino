@@ -4,6 +4,11 @@
 #include <Adafruit_GPS.h>
 //the GPS library needs this event though it isn't used.
 #include <SoftwareSerial.h>
+//Following 4 needed for 9 DOF
+#include <Adafruit_Sensor.h>
+#include <Adafruit_LSM303_U.h>
+#include <Adafruit_L3GD20_U.h>
+#include <Adafruit_9DOF.h>
 
 //Definitions
 #define  sseg1_addr    0x70
@@ -15,6 +20,11 @@
 //Set up 7 segment displays
 Adafruit_7segment sseg1 = Adafruit_7segment();
 Adafruit_7segment sseg2 = Adafruit_7segment();
+
+//Set up 9-Axis Sensor
+Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(30301);
+Adafruit_LSM303_Mag_Unified   mag   = Adafruit_LSM303_Mag_Unified(30302);
+Adafruit_L3GD20_Unified       gyro  = Adafruit_L3GD20_Unified(20);
 
 //Set up GPS
 Adafruit_GPS GPS(&GPS_serial);
@@ -29,17 +39,18 @@ float val2 = 999.2;
 String serial_line = ""; //buffer for serial data
 boolean serial_line_flag = false;
 
-boolean pi_good = false; 
+String gps_serial_line = ""; //buffer for gps serial data
+boolean gps_serial_line_flag = false;
 
+boolean pi_good = false; 
+boolean sensor_good = false;
 
 void writeDashes(Adafruit_7segment); 
 
-SIGNAL(TIMER0_COMPA_vect) {
+/*SIGNAL(TIMER0_COMPA_vect) {
   char c = GPS.read();
   if (c) UDR0 = c; 
-  //char c = input_serial.read();
-  //Serial.print(c);
-}
+}*/
 
 void setup()
 {
@@ -51,6 +62,12 @@ void setup()
   sseg1.begin(sseg1_addr);
   sseg2.begin(sseg2_addr);
   
+  //begin 9-axis
+  if(accel.begin() && mag.begin() && gyro.begin())
+  {
+    sensor_good = true;
+  }
+  
   //initialize input buffer
   serial_line.reserve(200);
   
@@ -61,12 +78,14 @@ void setup()
   GPS.sendCommand(PGCMD_NOANTENNA);
   
   //set up timer interrupt for GPS serial data
-  OCR0A = 0xAF;
-  TIMSK0 |= _BV(OCIE0A);
+  //OCR0A = 0xAF;
+  //TIMSK0 |= _BV(OCIE0A);
 }
 
 void loop()
 {
+  
+  //handleSensors(); //controls rx/tx of 9-axis data
   
   if(!pi_good)
   {
@@ -209,6 +228,24 @@ void serialEvent() //special built-in arduino function
   } 
 }
 
+void serial1Event() //special built-in arduino function
+{
+  //read serial data into buffer, set flag when EOL
+  while (Serial1.available()) 
+  {
+    char inChar = (char)Serial1.read(); 
+    gps_serial_line += inChar;
+    
+    if (inChar == '\n') 
+    {
+      gps_serial_line_flag = true;
+      Serial.print(gps_serial_line);
+      gps_serial_line = "";
+      gps_serial_line_flag = false;
+    } 
+  } 
+}
+
 void writeDashes(Adafruit_7segment sseg)
 {
   sseg.writeDigitRaw(0x00, 0b1000000);
@@ -241,4 +278,20 @@ void parseSerial()
   }
     serial_line_flag = false;
     serial_line = "";
+}
+
+void handleSensors()
+{
+  if(!sensor_good) {return;}
+  char buf[50];
+  sensors_event_t event;
+  accel.getEvent(&event);
+  sprintf(buf,"ACCEL=%f,%f,%f\n",event.acceleration.x,event.acceleration.y,event.acceleration.z);
+  Serial.print(buf);
+  mag.getEvent(&event);
+  sprintf(buf,"MAG=%f,%f,%f\n",event.magnetic.x,event.magnetic.y,event.magnetic.z);
+  Serial.print(buf);
+  gyro.getEvent(&event);
+  sprintf(buf,"GRYO=%f,%f,%f\n",event.gyro.x,event.gyro.y,event.gyro.z);
+  Serial.print(buf);
 }
