@@ -15,6 +15,7 @@
 #define  sseg2_addr    0x71
 #define  ID_DELAY      500
 #define  DATA_TIMEOUT  3000
+#define  SENSOR_PERIOD  200
 #define  GPS_serial    Serial1
 
 //Set up 7 segment displays
@@ -22,6 +23,7 @@ Adafruit_7segment sseg1 = Adafruit_7segment();
 Adafruit_7segment sseg2 = Adafruit_7segment();
 
 //Set up 9-Axis Sensor
+Adafruit_9DOF                 dof   = Adafruit_9DOF();
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(30301);
 Adafruit_LSM303_Mag_Unified   mag   = Adafruit_LSM303_Mag_Unified(30302);
 Adafruit_L3GD20_Unified       gyro  = Adafruit_L3GD20_Unified(20);
@@ -32,6 +34,7 @@ Adafruit_GPS GPS(&GPS_serial);
 //Identification delay
 long last_identification= 0; 
 long last_data = 0;
+long last_sensor = 0;
 
 float val1 = 999.1; //values written to the displays
 float val2 = 999.2;
@@ -85,8 +88,11 @@ void setup()
 void loop()
 {
   
-  //handleSensors(); //controls rx/tx of 9-axis data
-  
+  if(millis() - last_sensor > SENSOR_PERIOD)
+  {
+    handleSensors(); //controls rx/tx of 9-axis data
+    last_sensor = millis();
+  }
   if(!pi_good)
   {
     //Wait for motor controller to send data
@@ -228,7 +234,7 @@ void serialEvent() //special built-in arduino function
   } 
 }
 
-void serial1Event() //special built-in arduino function
+void serialEvent1() //special built-in arduino function
 {
   //read serial data into buffer, set flag when EOL
   while (Serial1.available()) 
@@ -283,15 +289,30 @@ void parseSerial()
 void handleSensors()
 {
   if(!sensor_good) {return;}
-  char buf[50];
-  sensors_event_t event;
-  accel.getEvent(&event);
-  sprintf(buf,"ACCEL=%f,%f,%f\n",event.acceleration.x,event.acceleration.y,event.acceleration.z);
-  Serial.print(buf);
-  mag.getEvent(&event);
-  sprintf(buf,"MAG=%f,%f,%f\n",event.magnetic.x,event.magnetic.y,event.magnetic.z);
-  Serial.print(buf);
-  gyro.getEvent(&event);
-  sprintf(buf,"GRYO=%f,%f,%f\n",event.gyro.x,event.gyro.y,event.gyro.z);
-  Serial.print(buf);
+  sensors_event_t gyro_event;
+  sensors_event_t accel_event;
+  sensors_event_t mag_event;
+  sensors_vec_t   orientation;
+  accel.getEvent(&accel_event);
+  mag.getEvent(&mag_event);
+  gyro.getEvent(&gyro_event);
+
+  if (dof.fusionGetOrientation(&accel_event, &mag_event, &orientation))
+  {
+    Serial.print(F("ORIENTATION="));
+    Serial.print(orientation.roll); //roll,pitch,heading in degrees
+    Serial.print(F(","));
+    Serial.print(orientation.pitch);
+    Serial.print(F(","));
+    Serial.print(orientation.heading);
+    Serial.println(F(""));
+  }
+  Serial.print("GYRO="); //  rad/s
+  Serial.print(gyro_event.gyro.x); Serial.print(",");
+  Serial.print(gyro_event.gyro.y); Serial.print(",");
+  Serial.print(gyro_event.gyro.z); Serial.print("\n");
+  Serial.print("ACCEL="); //  rad/s
+  Serial.print(accel_event.acceleration.x); Serial.print(",");
+  Serial.print(accel_event.acceleration.y); Serial.print(",");
+  Serial.print(accel_event.acceleration.z); Serial.print("\n");
 }
