@@ -1,3 +1,5 @@
+//for arduino mega 2560
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
@@ -47,6 +49,7 @@ boolean gps_serial_line_flag = false;
 
 boolean pi_good = false; 
 boolean sensor_good = false;
+boolean debug = true;
 
 void writeDashes(Adafruit_7segment); 
 
@@ -144,8 +147,7 @@ void serialEvent() //special built-in arduino function
   {
     char inChar = (char)Serial.read(); 
     serial_line += inChar;
-    
-    if (inChar == '\n') 
+    if (inChar == '&') 
     {
       serial_line_flag = true;
       //Serial.println("newline");
@@ -153,7 +155,7 @@ void serialEvent() //special built-in arduino function
   } 
 }
 
-void serialEvent1() //special built-in arduino function
+void serialEvent1() //special built-in arduino function //I like the naming system :(
 {
   //read serial data into buffer, set flag when EOL
   while (Serial1.available()) 
@@ -164,7 +166,8 @@ void serialEvent1() //special built-in arduino function
     if (inChar == '\n') 
     {
       gps_serial_line_flag = true;
-      Serial.print(gps_serial_line);
+      if(!debug) 
+          Serial.print(gps_serial_line);
       gps_serial_line = "";
       gps_serial_line_flag = false;
     } 
@@ -193,6 +196,7 @@ void parseSerial()
    //parse serial data
    if(serial_line[0]=='S')
    {
+     Serial.print("getting S");
      //sscanf(buf+2,"%f",&val1);
      val1 = (float) atof(buf+2);
    }
@@ -200,9 +204,9 @@ void parseSerial()
    {
      val2 = (float) atof(buf+2);
    } 
-  }
     serial_line_flag = false;
     serial_line = "";
+  }
 }
 
 void handleSensors()
@@ -215,7 +219,8 @@ void handleSensors()
   accel.getEvent(&accel_event);
   mag.getEvent(&mag_event);
   gyro.getEvent(&gyro_event);
-
+  if(!debug)
+  {
   if (dof.fusionGetOrientation(&accel_event, &mag_event, &orientation))
   {
     Serial.print(F("ORIENTATION="));
@@ -234,4 +239,5 @@ void handleSensors()
   Serial.print(accel_event.acceleration.x); Serial.print(",");
   Serial.print(accel_event.acceleration.y); Serial.print(",");
   Serial.print(accel_event.acceleration.z); Serial.print("\n");
+  }
 }
